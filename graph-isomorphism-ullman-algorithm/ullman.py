@@ -1,6 +1,12 @@
+# zadanie ukonczone
+
+import numpy as np
+
 class Vertex:
-    def __init__(self, key):
+    def __init__(self, xpos, ypos, key):
         self.key = key
+        self.x = xpos
+        self.y = ypos
 
     def __eq__(self, other):
         if isinstance(other, str):
@@ -11,20 +17,14 @@ class Vertex:
         return hash(self.key)
 
     def __str__(self):
-        return f"{self.key}"
-
-class Edge:
-    def __init__(self, start, end, weight):
-        self.start = start
-        self.end = end
-        self.weight = weight
+        return f"{self.key} : x = {self.x}, y = {self.y}"
 
 class Graph:
 
     def __init__(self):
         self.dct = {}
         self.lst = []
-        self.tab = [[None]]
+        self.tab = [[0]]
         self._size = 0
 
     def print_tab(self):
@@ -33,7 +33,7 @@ class Graph:
 
     def print_tab_format(self):
         for row in self.tab:
-            print([str(edge.weight)+" " if isinstance(edge, Edge) else str(edge) for edge in row])
+            print([edge for edge in row])
 
     def printGraph(self):
         n = self.order()
@@ -58,22 +58,22 @@ class Graph:
 
     def expand(self):
         for row in self.tab:
-            row.append(None)
-        self.tab.append([None for _ in range(len(self.tab[0]))])
+            row.append(0)
+        self.tab.append([0 for _ in range(len(self.tab[0]))])
         return self
 
-    def insertEdge(self, vertex1, vertex2, edge):
+    def insertEdge(self, vertex1, vertex2):
         if vertex1 not in self.lst:
             self.insertVertex(vertex1)
         if vertex2 not in self.lst:
             self.insertVertex(vertex2)
-        self.tab[self.dct[vertex1]][self.dct[vertex2]] = edge
-        self.tab[self.dct[vertex2]][self.dct[vertex1]] = edge
+        self.tab[self.dct[vertex1]][self.dct[vertex2]] = 1
+        self.tab[self.dct[vertex2]][self.dct[vertex1]] = 1
         return self
 
     def deleteEdge(self, vertex1, vertex2):
-        self.tab[self.dct[vertex1]][self.dct[vertex2]] = None
-        self.tab[self.dct[vertex2]][self.dct[vertex1]] = None
+        self.tab[self.dct[vertex1]][self.dct[vertex2]] = 0
+        self.tab[self.dct[vertex2]][self.dct[vertex1]] = 0
         return self
 
     def deleteVertex(self, vertex):
@@ -93,13 +93,6 @@ class Graph:
         self._size -= 1
         return self
 
-    # def blockVertex(self, vertex):  # used in Prim's MST construction algorithm
-    #     block_index = self.dct[vertex]    # not used at all :)
-    #     for i in range(len(self.tab)):
-    #         self.tab[i][block_index] = None
-    #     return self
-
-
     def getVertexIdx(self, vertex):
         return self.dct[vertex]
 
@@ -109,7 +102,7 @@ class Graph:
     def neighbours(self, vertex_idx):
         neighs = []
         for i in range(len(self.tab)):
-            if self.tab[vertex_idx][i]:
+            if self.tab[vertex_idx][i] == 1:
                 neighs.append(i)
         return neighs
 
@@ -120,7 +113,7 @@ class Graph:
         suma = 0
         for i in range(len(self.tab)):
             for j in range(i):
-                if self.tab[i][j] != None:
+                if self.tab[i][j] != 0:
                     suma += 1
         return int(suma/2)
 
@@ -140,7 +133,204 @@ class Graph:
         return compressed_list
 
 
+def prepare_M0(G,P):
+    x = P.order()
+    y = G.order()
+
+    mtx = np.zeros((x,y))
+
+    for u in range(mtx.shape[0]):
+        dvu = sum(P.tab[u])
+        for v in range(mtx.shape[1]):
+            dvv = sum(G.tab[v])
+
+            if dvu <= dvv:
+                mtx[u][v] = 1
+    return mtx
 
 
-def Ullman(used_cols, current_row, G, P, M):
-    pass
+def Ullman_basic(used_cols, current_row, G, P, M):
+    isomorphisms = 0
+    recursions = 0
+    
+    recursions += 1
+
+    if current_row == M.shape[0]:
+        if np.array_equal(P, M @ (M @ G).T):
+            isomorphisms += 1
+            return isomorphisms, recursions
+        return isomorphisms, recursions
+    
+    new_M = np.copy(M)
+
+    t = 0
+    for c in used_cols:
+        if c == 0:
+            new_M[current_row] = [0 for _ in range(M.shape[1])]
+            new_M[current_row, t] = 1
+
+            used_cols[t] = 1
+
+            iso, rec = Ullman_basic(used_cols, current_row+1, G, P, new_M)
+
+            isomorphisms += iso
+            recursions += rec
+            used_cols[t] = 0
+        t += 1
+    
+    return isomorphisms, recursions
+
+
+def test_Ullman_basic():
+    graph_G = [('A','B',1), ('B','F',1), ('B','C',1), ('C','D',1), ('C','E',1), ('D','E',1)]
+    G = Graph()
+    for el in graph_G:
+        G.insertEdge(el[0],el[1])
+
+    graph_P = [('A','B',1), ('B','C',1), ('A','C',1)]
+    P = Graph()
+    for el in graph_P:
+        P.insertEdge(el[0],el[1])
+
+    G_tab = np.array(G.tab)
+    P_tab = np.array(P.tab)
+    M = np.zeros((P.order(), G.order()))
+
+    print(Ullman_basic(np.zeros(G.order(), dtype=int), 0, G_tab, P_tab, M))
+    return
+
+def Ullman_M0(used_cols, current_row, G, P, M, M0):
+    isomorphisms = 0
+    recursions = 0
+
+    recursions += 1
+
+    if current_row == M.shape[0]:
+        if np.array_equal(P, M @ (M @ G).T):
+            isomorphisms += 1
+            return isomorphisms, recursions
+        return isomorphisms, recursions
+    
+    new_M = np.copy(M)
+
+    t = 0
+    for c in used_cols:
+        if c == 0 and M0[current_row][t] == 1:
+            new_M[current_row] = [0 for _ in range(M.shape[1])]
+            new_M[current_row][t] = 1
+            
+            used_cols[t] = 1
+
+            iso, rec = Ullman_M0(used_cols, current_row+1, G, P, new_M, M0)
+
+            isomorphisms += iso
+            recursions += rec
+            used_cols[t] = 0
+        t += 1
+    
+    return isomorphisms, recursions
+
+
+def test_Ullman_M0():
+    graph_G = [('A','B',1), ('B','F',1), ('B','C',1), ('C','D',1), ('C','E',1), ('D','E',1)]
+    G = Graph()
+    for el in graph_G:
+        G.insertEdge(el[0],el[1])
+
+    graph_P = [('A','B',1), ('B','C',1), ('A','C',1)]
+    P = Graph()
+    for el in graph_P:
+        P.insertEdge(el[0],el[1])
+
+    G_tab = np.array(G.tab)
+    P_tab = np.array(P.tab)
+    M = np.zeros((P.order(), G.order()))
+    M0 = prepare_M0(G, P)
+
+    print(Ullman_M0(np.zeros(G.order(), dtype=int), 0, G_tab, P_tab, M, M0))
+    return
+
+
+def prune(M, G, P):
+    run = True
+    while run:
+        run = False
+        for v in range(M.shape[1]):
+            for u in range(M.shape[0]):
+                if M[u][v] != 0:
+                    for k in range(P.shape[0]):
+                        if P[u][k] != 0:
+                            for t in range(G.shape[0]):
+                                if M[k][t] != 0:
+                                    if G[v][t] == 0:
+                                        M[u][v] = 0
+                                        run = True
+
+
+
+def Ullman_prune(used_cols, current_row, G, P, M, M0):
+    isomorphisms = 0
+    recursions = 0
+
+    recursions += 1
+
+    if current_row == M.shape[0]:
+        if np.array_equal(P, M @ (M @ G).T):
+            isomorphisms += 1
+            return isomorphisms, recursions
+        return isomorphisms, recursions
+
+    new_M = np.copy(M)
+
+    prune(M,G,P)
+    for row in new_M[:current_row]:
+        if (row==0).all():
+            return isomorphisms, recursions
+
+    t = 0
+    for c in used_cols:
+        if c == 0 and M0[current_row][t] == 1:
+            new_M[current_row] = [0 for _ in range(M.shape[1])]
+            new_M[current_row][t] = 1
+            
+            used_cols[t] = 1
+
+            iso, rec = Ullman_prune(used_cols, current_row+1, G, P, new_M, M0)
+
+            isomorphisms += iso
+            recursions += rec
+
+            used_cols[t] = 0
+        t += 1
+    
+    return isomorphisms, recursions
+
+
+def test_Ullman_prune():
+    graph_G = [('A','B',1), ('B','F',1), ('B','C',1), ('C','D',1), ('C','E',1), ('D','E',1)]
+    G = Graph()
+    for el in graph_G:
+        G.insertEdge(el[0],el[1])
+
+    graph_P = [('A','B',1), ('B','C',1), ('A','C',1)]
+    P = Graph()
+    for el in graph_P:
+        P.insertEdge(el[0],el[1])
+
+    G_tab = np.array(G.tab)
+    P_tab = np.array(P.tab)
+    M = np.zeros((P.order(), G.order()))
+    M0 = prepare_M0(G, P)
+
+    print(Ullman_prune(np.zeros(G.order(), dtype=int), 0, G_tab, P_tab, M, M0))
+    return
+
+"""
+--------------
+Test functions
+--------------
+"""
+
+test_Ullman_basic()
+test_Ullman_M0()
+test_Ullman_prune()
